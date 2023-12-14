@@ -6,12 +6,6 @@ HF_KEY = "YOUR_API_KEY"
 
 headers = {"Authorization": f"Bearer {HF_KEY}"}
 
-# if torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# else:
-#     device = torch.device("cpu")
-#     print("Mps is not available, using cpu instead")
-
 def query(API_URL, payload):
     response = requests.post(API_URL, headers=headers, json=payload)
 
