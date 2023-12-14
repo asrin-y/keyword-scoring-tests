@@ -4,7 +4,7 @@ import sys
 
 HF_KEY = "YOUR_API_KEY"
 
-headers = {f"Authorization": "Bearer {HF_KEY}}"}
+headers = {"Authorization": f"Bearer {HF_KEY}"}
 
 # if torch.backends.mps.is_available():
 #     device = torch.device("mps")
