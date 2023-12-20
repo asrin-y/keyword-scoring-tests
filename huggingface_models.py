@@ -12,15 +12,22 @@ def query(API_URL, payload):
     #parse the model name from the API_URL
     model_name = API_URL.split("/")[-1]
 
-    while response.status_code == 503:
-        print(f"{model_name} is loading or rate limit has been reached, waiting 10 seconds")
-        print(f"Error: {response.json()['error']}")
+    # If the API returns a 5xx error, retry the request
+    consecutive_errors = 0
+    while response.status_code >= 500:
+        if consecutive_errors >= 15:
+            sys.exit("Too many consecutive errors from the API, stopping.")
+        print(f"Error: {response.json()['error']}, retrying in 10 seconds...")
         sleep(10)
+        consecutive_errors += 1
         response = requests.post(API_URL, headers=headers, json=payload)
 
     if response.status_code != 200:
         print(f"Error {response.status_code} in {model_name} API call")
-        sys.exit(1)
+        print(response.json())
+        print(payload)
+        print("Skipping this row...")
+        return {}
 
     return response.json()
     
@@ -36,7 +43,10 @@ def classify_keywords(text_content, labels):
 
     text_content = translate_to_english(text_content)
 
-    if not text_content.strip():
+    try:
+        if not text_content.strip():
+            return {}
+    except:
         return {}
 
     return_dict = {}
@@ -56,6 +66,9 @@ def classify_keywords(text_content, labels):
                 }
             }
             response = query(API_URL, payload)
+
+            if not response:
+                return {}
 
             zipped_response = zip(response['labels'], response['scores'])
 
@@ -81,6 +94,9 @@ def detect_language(text):
     # Make the API request  
     response = query(API_URL, payload)
 
+    if not response:
+        return ""
+
     return response[0][0]["label"]
 
 
@@ -104,6 +120,9 @@ def translate_to_english(text):
 
     # Make the API request
     response = query(API_URL, payload)
+
+    if not response:
+        return ""
 
     # Extract the translated text from the response
     translated_text = response[0]["generated_text"]
