@@ -1,6 +1,7 @@
 import requests
 from time import sleep
 import sys
+from bs4 import BeautifulSoup
 
 HF_KEY = "YOUR_API_KEY"
 
@@ -15,25 +16,23 @@ def query(API_URL, payload):
     # If the API returns a 5xx error, retry the request
     consecutive_errors = 0
     while response.status_code >= 500:
-        if consecutive_errors >= 15:
+        if consecutive_errors >= 20:
             sys.exit("Too many consecutive errors from the API, stopping.")
-        print(f"Error: {response.json()['error']}, retrying in 10 seconds...")
-        sleep(10)
+        print(f"Error: {response.json()['error']}, retrying in 5 seconds...")
+        sleep(5)
         consecutive_errors += 1
         response = requests.post(API_URL, headers=headers, json=payload)
 
     if response.status_code != 200:
         print(f"Error {response.status_code} in {model_name} API call")
         print(response.json())
-        print(payload)
         print("Skipping this row...")
         return {}
 
     return response.json()
     
 def classify_keywords(text_content, labels):
-    bart_API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
-    deberta_API_URL = "https://api-inference.huggingface.co/models/MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
+    API_URL = "https://api-inference.huggingface.co/models/MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 
     try:
         if not text_content.strip():
@@ -41,7 +40,7 @@ def classify_keywords(text_content, labels):
     except:
         return {}
 
-    text_content = translate_to_english(text_content)
+    # text_content = translate_to_english(text_content)
 
     try:
         if not text_content.strip():
@@ -51,33 +50,34 @@ def classify_keywords(text_content, labels):
 
     return_dict = {}
 
-    for model_type, API_URL in [("bart", bart_API_URL), ("deberta", deberta_API_URL)]:
-        output = ""
+    model_type = "deberta"
 
-        # Divide labels into sublists with a maximum of 10 items each
-        sublists = [labels[i:i+10] for i in range(0, len(labels), 10)]
+    output = ""
 
-        for sublist in sublists:
-            # threshold = 1 / len(sublist)
-            payload = {
-                "inputs": text_content,
-                "parameters": {
-                    "candidate_labels": sublist
-                }
+    # Divide labels into sublists with a maximum of 10 items each
+    sublists = [labels[i:i+10] for i in range(0, len(labels), 10)]
+
+    for sublist in sublists:
+        # threshold = 1 / len(sublist)
+        payload = {
+            "inputs": text_content,
+            "parameters": {
+                "candidate_labels": sublist
             }
-            response = query(API_URL, payload)
+        }
+        response = query(API_URL, payload)
 
-            if not response:
-                return {}
+        if not response:
+            return {}
 
-            zipped_response = zip(response['labels'], response['scores'])
+        zipped_response = zip(response['labels'], response['scores'])
 
-            for label, score in zipped_response:
-                # if float(score) > threshold:
-                output = output + f"{label}: {score}\n"
-            output = output + "-------------------\n"
-        
-        return_dict[model_type] = output
+        for label, score in zipped_response:
+            # if float(score) > threshold:
+            output = output + f"{label}: {score}\n"
+        output = output + "-------------------\n"
+    
+    return_dict[model_type] = output
 
     return return_dict
 
@@ -152,3 +152,61 @@ def map_language_code(two_char_code):
     }
 
     return language_map.get(two_char_code)
+
+def prompt_zephyr(zephyr_system_prompt, webpage_text):
+
+    API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+
+    prompt = f'''
+        <|system|>
+        {zephyr_system_prompt}
+        <|user|>
+        Company's webpage's text: {webpage_text}
+        <|assistant|>
+        Summary: 
+    '''
+
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "return_full_text": False
+        }
+    }
+
+    response = query(API_URL, payload)
+
+    generated_text = response[0]["generated_text"]
+
+    # print(f"Generated text: {generated_text}")
+
+    return generated_text
+
+
+def get_page_text(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
+    # get all text in the body using beautiful soup
+    if not url.strip():
+        return ""
+
+    try:
+        page = requests.get(url, headers=headers)
+    except:
+        return ""
+
+    if page.status_code != 200:
+        return ""
+
+    soup = BeautifulSoup(page.content, 'html.parser')
+
+    # get all text in the body
+    body = soup.find('body')
+
+    text = body.text
+
+    text = text.replace("\n", " ").strip()
+
+    text = ' '.join(text.split())
+
+    return text
