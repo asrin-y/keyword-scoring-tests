@@ -31,7 +31,7 @@ def query(API_URL, payload):
 
     return response.json()
     
-def classify_keywords(text_content, labels):
+def classify_keywords(text_content, keywords_list):
     API_URL = "https://api-inference.huggingface.co/models/MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 
     try:
@@ -54,15 +54,12 @@ def classify_keywords(text_content, labels):
 
     output = ""
 
-    # Divide labels into sublists with a maximum of 10 items each
-    sublists = [labels[i:i+10] for i in range(0, len(labels), 10)]
-
-    for sublist in sublists:
+    for keywords in keywords_list:
         # threshold = 1 / len(sublist)
         payload = {
             "inputs": text_content,
             "parameters": {
-                "candidate_labels": sublist
+                "candidate_labels": keywords
             }
         }
         response = query(API_URL, payload)
