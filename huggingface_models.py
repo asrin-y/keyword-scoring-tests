@@ -2,10 +2,15 @@ import requests
 from time import sleep
 import sys
 from bs4 import BeautifulSoup
+import os
+# from transformers import AutoTokenizer
 
-HF_KEY = "YOUR_API_KEY"
+
+HF_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
 headers = {"Authorization": f"Bearer {HF_KEY}"}
+
+# tokenizer = AutoTokenizer.from_pretrained("mistralai/llm-8x7B-v0.1")
 
 def query(API_URL, payload):
     response = requests.post(API_URL, headers=headers, json=payload)
@@ -150,18 +155,45 @@ def map_language_code(two_char_code):
 
     return language_map.get(two_char_code)
 
-def prompt_zephyr(zephyr_system_prompt, webpage_text):
+def prompt_llm(llm_system_prompt, webpage_text):
 
-    API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+    API_URL = "https://api-inference.huggingface.co/models/openchat/openchat-3.5-1210"
+
+    # prompt = f'''
+    #     <|system|>
+    #     {llm_system_prompt}
+    #     <|user|>
+    #     Company's webpage's text: {webpage_text}
+    #     <|assistant|>
+    #     Summary: 
+    # '''
 
     prompt = f'''
-        <|system|>
-        {zephyr_system_prompt}
-        <|user|>
-        Company's webpage's text: {webpage_text}
-        <|assistant|>
-        Summary: 
+        GPT4 Correct User:{llm_system_prompt}
+        Webpage Text: {webpage_text}<|end_of_turn|>
+        GPT4 Correct Assistant: Summary: 
     '''
+
+    # #  Tokenize the text and print the token count    
+    # tokens = tokenizer.tokenize(prompt)
+    # token_count = len(tokens)
+    # print(f"Token count: {token_count}")
+
+    # while token_count > 1024:
+    #     webpage_text = ' '.join(webpage_text.split()[1:-1])
+
+    #     prompt = f'''
+    #         <|system|>
+    #         {llm_system_prompt}
+    #         <|user|>
+    #         Company's webpage's text: {webpage_text}
+    #         <|assistant|>
+    #         Summary: 
+    #     '''
+
+    #     tokens = tokenizer.tokenize(prompt)
+    #     token_count = len(tokens)
+    #     print(f"Token count: {token_count}")
 
     payload = {
         "inputs": prompt,
@@ -171,6 +203,9 @@ def prompt_zephyr(zephyr_system_prompt, webpage_text):
     }
 
     response = query(API_URL, payload)
+
+    if not response:
+        return ""
 
     generated_text = response[0]["generated_text"]
 

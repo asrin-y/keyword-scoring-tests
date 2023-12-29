@@ -5,18 +5,34 @@ from tqdm import tqdm
 import sys
 import os
 
-zephyr_system_prompt = '''
-    You are a helpful assistant and your role is to understand and explain what the company does 
-    BY USING THE COMPANY WEBSITE INDEX TEXT. Use a maximum of 250 characters while summarizing it. 
-    Focus on what the company's products/services are. Give me the result in keywords or small sentences.
+llm_system_prompts = [
 '''
+    You are a helpful assistant and your role is to understand and explain what the company does
+    by using the company website index text. Your output should be keywords or small sentences of the company’s product/services. 
+    Use maximum 250 characters while summarizing it. Focus on what the company's products/services are.
+''',
+'''
+    You are a helpful assistant and your role is to understand and explain what the company does
+    by using the company website index text. Your output should be a list of keywords or small sentences.
+    Use maximum 250 characters while summarizing it. Focus on what the company's products/services are.
+'''
+]
+
 
 keywords_list = [
     ["Machinery for filtering or purifying liquids", "Machinery for filtering or purifying gas", "Agricultural Processing Machinery", "Agricultural and Farming Heavy Equipment", "Agricultural Machinery"],
     ["Machinery and apparatus for filtering or purifying liquids or gases", "Agricultural and Farming Machinery", "NOT Agricultual and Farming Machinery", "NOT Machinery and apparatus for filtering or purifying liquids or gases"],
-    ["metal filtering equipment", "agricultural machine", "harvesting maching", "metal sprayer frames", "threshing machinery", "agricultural processing machines", "farming heavy equipments", "industrial gas filteing frames", "large filter housing"]
+    ["metal filtering equipment", "agricultural machine", "harvesting maching", "metal sprayer frames", "threshing machinery", "agricultural processing machines", "farming heavy equipments", "industrial gas filteing frames", "large filter housing"],
+    ["Soil preparation or cultivation machinery (plows, harrows, seeders, transplanters).",
+    "Harvesting or threshing machinery; mowers for lawns, parks or sports-grounds; machines for cleaning, sorting or grading eggs, fruit or other agricultural produce.",
+    "Other agricultural, horticultural, forestry, poultry-keeping or bee-keeping machinery, including germination plant fitted with mechanical or thermal equipment; poultry incubators and brooders.",
+    "Milking machines and dairy machinery.",
+    "Mechanical appliances for projecting, dispersing or spraying liquids or powders; such as agricultural sprayers.",
+    "Machines for cleaning, sorting or grading seed, grain or dried leguminous vegetables; machinery used in the milling industry for the working of cereals or dried leguminous vegetables, other than farm-type machinery.",
+    "Wheeled tractors used in agriculture and forestry.",
+    "Machinery and apparatus for filtering or purifying liquids or gases."]
 ]
-
+ 
 
 for keywords in keywords_list:
     if len(keywords) > 10:
@@ -31,7 +47,15 @@ while not os.path.isfile(file_name):
     print("File not found")
     file_name = input("Enter file name: ")
 
-df = pd.read_csv(file_name)
+file_extension = os.path.splitext(file_name)[1]
+
+if file_extension == '.csv':
+    df = pd.read_csv(file_name)
+elif file_extension == '.xlsx':
+    df = pd.read_excel(file_name)
+else:
+    print("Invalid file format. Only CSV and XLSX files are supported.")
+    sys.exit(1)
 
 # Column names input with 'none' check
 seo_descr_column_name = input("Enter SEO Description column name (type 'none' to skip, press Enter for default 'SEO Description', or type 'none' to skip): ").strip() or "SEO Description"
@@ -83,7 +107,7 @@ texts_to_process = [f"{seo_desc} {short_desc}" for seo_desc, short_desc in zip(s
 deberta_scores_seo_and_short_desc = []
 deberta_scores_webpage = []
 webpage_texts = []
-zephyr_webpage_summaries = []
+llm_webpage_summaries = []
 webpage_scores = []
 
 for text, url in tqdm(zip(texts_to_process, website_urls), total=int(company_count)):
@@ -97,26 +121,39 @@ for text, url in tqdm(zip(texts_to_process, website_urls), total=int(company_cou
     webpage_text = get_page_text(url)
     webpage_texts.append(webpage_text)
 
-    zephyr_response = ""
+    llm_responses = []
     if webpage_text.strip():
-        zephyr_response = prompt_zephyr(zephyr_system_prompt, webpage_text)
+        for llm_system_prompt in llm_system_prompts:
+            llm_response = prompt_llm(llm_system_prompt, webpage_text)
+            llm_responses.append(llm_response)
 
-    zephyr_webpage_summaries.append(zephyr_response)
+        llm_webpage_summaries.append(llm_responses)
 
-    deberta_score = ""
-    if zephyr_response.strip():
-        scores = classify_keywords(zephyr_response, keywords_list)
-        deberta_score = scores["deberta"]
+    else:
+        llm_webpage_summaries.append([""] * len(llm_system_prompts))
+        llm_responses = [""] * len(llm_system_prompts)
 
-    deberta_scores_webpage.append(deberta_score)
+    deberta_scores = []
+
+    for llm_response in llm_responses:
+        if llm_response.strip():
+            scores = classify_keywords(llm_response, keywords_list)
+            deberta_score = scores["deberta"]
+            deberta_scores.append(deberta_score)
+        else:
+            deberta_scores.append("")
+
+    deberta_scores_webpage.append(deberta_scores)
 
 df = pd.DataFrame()
 
-df["Scored Text"] = texts_to_process
-df["Score of SEO Description and Short Description"] = deberta_scores_seo_and_short_desc
-df["Webpage Text"] = webpage_texts
-df["Zephyr Webpage Summary"] = zephyr_webpage_summaries
-df["Score of Webpage Summary"] = deberta_scores_webpage
+if seo_descr_column_name.lower() != 'none' or short_descr_column_name.lower() != 'none':
+    df["Scored Text"] = [""] + texts_to_process
+    df["Score of SEO Description and Short Description"] = [""] + deberta_scores_seo_and_short_desc
+df["Webpage Text"] = [""] + webpage_texts
+for i, llm_system_prompt in enumerate(llm_system_prompts):
+    df[f"LLM Webpage Summary {i+1}"] = [llm_system_prompt] + [llm_responses[i] for llm_responses in llm_webpage_summaries]
+    df[f"Score of LLM Webpage Summary {i+1}"] = [""] + [deberta_scores[i] for deberta_scores in deberta_scores_webpage]
 
 # Save the output file with an incremented number if it already exists
 output_file = "scored.csv"
