@@ -6,7 +6,7 @@ import os
 # from transformers import AutoTokenizer
 
 
-HF_KEY = "HF_API_KEY"
+HF_KEY = "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"
 
 headers = {"Authorization": f"Bearer {HF_KEY}"}
 
@@ -23,7 +23,10 @@ def query(API_URL, payload):
     while response.status_code >= 500:
         if consecutive_errors >= 20:
             sys.exit("Too many consecutive errors from the API, stopping.")
-        print(f"Error: {response.json()['error']}, retrying in 5 seconds...")
+        try:
+            print(f"Error: {response.json()['error']}, retrying in 5 seconds...")
+        except:
+            print(f"Error: {response.status_code}, retrying in 5 seconds...")
         sleep(5)
         consecutive_errors += 1
         response = requests.post(API_URL, headers=headers, json=payload)
@@ -231,19 +234,20 @@ def get_page_text(url):
 
     if page.status_code != 200:
         return ""
+    
+    try:
+        soup = BeautifulSoup(page.content, 'html.parser')
 
-    soup = BeautifulSoup(page.content, 'html.parser')
+        # get all text in the body
+        body = soup.find('body')
 
-    # get all text in the body
-    body = soup.find('body')
+        text = body.text
 
-    if not body:
+        text = text.replace("\n", " ").strip()
+
+        text = ' '.join(text.split())
+
+        return text
+
+    except:
         return ""
-
-    text = body.text
-
-    text = text.replace("\n", " ").strip()
-
-    text = ' '.join(text.split())
-
-    return text

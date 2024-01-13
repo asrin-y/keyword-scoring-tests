@@ -4,6 +4,7 @@ from huggingface_models import *
 from tqdm import tqdm
 import sys
 import os
+import traceback
 
 llm_system_prompts = [
 '''
@@ -20,17 +21,9 @@ llm_system_prompts = [
 
 
 keywords_list = [
-    ["Machinery for filtering or purifying liquids", "Machinery for filtering or purifying gas", "Agricultural Processing Machinery", "Agricultural and Farming Heavy Equipment", "Agricultural Machinery"],
-    ["Machinery and apparatus for filtering or purifying liquids or gases", "Agricultural and Farming Machinery", "NOT Agricultual and Farming Machinery", "NOT Machinery and apparatus for filtering or purifying liquids or gases"],
-    ["metal filtering equipment", "agricultural machine", "harvesting maching", "metal sprayer frames", "threshing machinery", "agricultural processing machines", "farming heavy equipments", "industrial gas filteing frames", "large filter housing"],
-    ["Soil preparation or cultivation machinery (plows, harrows, seeders, transplanters).",
-    "Harvesting or threshing machinery; mowers for lawns, parks or sports-grounds; machines for cleaning, sorting or grading eggs, fruit or other agricultural produce.",
-    "Other agricultural, horticultural, forestry, poultry-keeping or bee-keeping machinery, including germination plant fitted with mechanical or thermal equipment; poultry incubators and brooders.",
-    "Milking machines and dairy machinery.",
-    "Mechanical appliances for projecting, dispersing or spraying liquids or powders; such as agricultural sprayers.",
-    "Machines for cleaning, sorting or grading seed, grain or dried leguminous vegetables; machinery used in the milling industry for the working of cereals or dried leguminous vegetables, other than farm-type machinery.",
-    "Wheeled tractors used in agriculture and forestry.",
-    "Machinery and apparatus for filtering or purifying liquids or gases."]
+    ["plant nursery", "commercial plant nursery", "seedlings", "wholesale plant nursery", "floral nursery", "horticulture construction", "horticulture producers", "Gardening Center"],
+    ["Plant Nursery", "NOT Plant Nursery"],
+    ["Garden Designer", "Landscaper", "Plant Nursery (Grower)", "Horticulture and Farm Supplies", "Plant Retailer"]
 ]
  
 
@@ -58,9 +51,9 @@ else:
     sys.exit(1)
 
 # Column names input with 'none' check
-seo_descr_column_name = input("Enter SEO Description column name (type 'none' to skip, press Enter for default 'SEO Description', or type 'none' to skip): ").strip() or "SEO Description"
-short_descr_column_name = input("Enter Short Description column name (type 'none' to skip, press Enter for default 'Short Description', or type 'none' to skip): ").strip() or "Short Description"
-website_url_column_name = input("Enter Website URL column name (type 'none' to skip, press Enter for default 'Website', or type 'none' to skip): ").strip() or "Website"
+seo_descr_column_name = input("Enter SEO Description column name (type 'none' to skip, press Enter for default 'SEO Description'): ").strip() or "SEO Description"
+short_descr_column_name = input("Enter Short Description column name (type 'none' to skip, press Enter for default 'Short Description'): ").strip() or "Short Description"
+website_url_column_name = input("Enter Website URL column name (type 'none' to skip, press Enter for default 'Website'): ").strip() or "Website"
 
 company_count = input("Enter number of companies to process (press Enter to process all): ")
 if not company_count.strip():
@@ -108,59 +101,93 @@ deberta_scores_seo_and_short_desc = []
 deberta_scores_webpage = []
 webpage_texts = []
 llm_webpage_summaries = []
-webpage_scores = []
 
-for text, url in tqdm(zip(texts_to_process, website_urls), total=int(company_count)):
-    debarta_score = classify_keywords(text, keywords_list)
+try:
 
-    if debarta_score:
-        deberta_scores_seo_and_short_desc.append(debarta_score["deberta"])
-    else:
-        deberta_scores_seo_and_short_desc.append("")
+    for text, url in tqdm(zip(texts_to_process, website_urls), total=int(company_count)):
+        try:
+            deberta_score_seo_short_desc = classify_keywords(text, keywords_list)
+        except:
+            print("An error occured, continuing...")
+            deberta_score_seo_short_desc = {}
 
-    webpage_text = get_page_text(url)
-    webpage_texts.append(webpage_text)
+        try:
+            webpage_text = get_page_text(url)
+        except:
+            print("An error occured, continuing...")
+            webpage_text = ""
 
-    llm_responses = []
-    if webpage_text.strip():
-        for llm_system_prompt in llm_system_prompts:
-            llm_response = prompt_llm(llm_system_prompt, webpage_text)
-            llm_responses.append(llm_response)
-
-        llm_webpage_summaries.append(llm_responses)
-
-    else:
-        llm_webpage_summaries.append([""] * len(llm_system_prompts))
-        llm_responses = [""] * len(llm_system_prompts)
-
-    deberta_scores = []
-
-    for llm_response in llm_responses:
-        if llm_response.strip():
-            scores = classify_keywords(llm_response, keywords_list)
-            deberta_score = scores["deberta"]
-            deberta_scores.append(deberta_score)
+        llm_responses = []
+        if webpage_text.strip():
+            for llm_system_prompt in llm_system_prompts:
+                try:
+                    llm_response = prompt_llm(llm_system_prompt, webpage_text)
+                except:
+                    print("An error occured, continuing...")
+                    llm_response = ""
+                llm_responses.append(llm_response)
         else:
-            deberta_scores.append("")
+            llm_responses = [""] * len(llm_system_prompts)
 
-    deberta_scores_webpage.append(deberta_scores)
+        deberta_scores = []
 
-df = pd.DataFrame()
+        for llm_response in llm_responses:
+            if llm_response.strip():
+                try:
+                    scores = classify_keywords(llm_response, keywords_list)
+                except:
+                    print("An error occured, continuing...")
+                    scores = {}
+                if scores:
+                    deberta_score = scores["deberta"]
+                else:
+                    deberta_score = ""
+                deberta_scores.append(deberta_score)
+            else:
+                deberta_scores.append("")
 
-if seo_descr_column_name.lower() != 'none' or short_descr_column_name.lower() != 'none':
-    df["Scored Text"] = [""] + texts_to_process
-    df["Score of SEO Description and Short Description"] = [""] + deberta_scores_seo_and_short_desc
-df["Webpage Text"] = [""] + webpage_texts
-for i, llm_system_prompt in enumerate(llm_system_prompts):
-    df[f"LLM Webpage Summary {i+1}"] = [llm_system_prompt] + [llm_responses[i] for llm_responses in llm_webpage_summaries]
-    df[f"Score of LLM Webpage Summary {i+1}"] = [""] + [deberta_scores[i] for deberta_scores in deberta_scores_webpage]
+        # Append the all gathered data to the lists
 
-# Save the output file with an incremented number if it already exists
-output_file = "scored.csv"
-count = 1
-while os.path.isfile(output_file):
-    output_file = f"scored({count}).csv"
-    count += 1
+        if deberta_score_seo_short_desc:
+            deberta_scores_seo_and_short_desc.append(deberta_score_seo_short_desc["deberta"])
+        else:
+            deberta_scores_seo_and_short_desc.append("")
 
-print(f"Saving output to {output_file}")
-df.to_csv(output_file, index=False)
+        deberta_scores_webpage.append(deberta_scores)
+        
+        webpage_texts.append(webpage_text)
+
+        if webpage_text.strip():
+            llm_webpage_summaries.append(llm_responses)
+
+        else:
+            llm_webpage_summaries.append([""] * len(llm_system_prompts))
+
+
+except KeyboardInterrupt:
+    print("Keyboard Interrupt. Exiting...")
+    sys.exit(1)
+
+except Exception:
+    traceback.print_exc()
+
+finally:
+    df = pd.DataFrame()
+
+    if seo_descr_column_name.lower() != 'none' or short_descr_column_name.lower() != 'none':
+        df["Scored Text"] = [""] + texts_to_process
+        df["Score of SEO Description and Short Description"] = [""] + deberta_scores_seo_and_short_desc
+    df["Webpage Text"] = [""] + webpage_texts
+    for i, llm_system_prompt in enumerate(llm_system_prompts):
+        df[f"LLM Webpage Summary {i+1}"] = [llm_system_prompt] + [llm_responses[i] for llm_responses in llm_webpage_summaries]
+        df[f"Score of LLM Webpage Summary {i+1}"] = [""] + [deberta_scores[i] for deberta_scores in deberta_scores_webpage]
+
+    # Save the output file with an incremented number if it already exists
+    output_file = "scored.csv"
+    count = 1
+    while os.path.isfile(output_file):
+        output_file = f"scored({count}).csv"
+        count += 1
+
+    print(f"Saving output to {output_file}")
+    df.to_csv(output_file, index=False)
