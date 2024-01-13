@@ -6,7 +6,7 @@ import os
 # from transformers import AutoTokenizer
 
 
-HF_KEY = "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"
+HF_KEY = "HF_API_KEY"
 
 headers = {"Authorization": f"Bearer {HF_KEY}"}
 

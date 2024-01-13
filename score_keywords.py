@@ -108,12 +108,14 @@ try:
         try:
             deberta_score_seo_short_desc = classify_keywords(text, keywords_list)
         except:
+            traceback.print_exc()
             print("An error occured, continuing...")
             deberta_score_seo_short_desc = {}
 
         try:
             webpage_text = get_page_text(url)
         except:
+            traceback.print_exc()
             print("An error occured, continuing...")
             webpage_text = ""
 
@@ -123,6 +125,7 @@ try:
                 try:
                     llm_response = prompt_llm(llm_system_prompt, webpage_text)
                 except:
+                    traceback.print_exc()
                     print("An error occured, continuing...")
                     llm_response = ""
                 llm_responses.append(llm_response)
@@ -136,6 +139,7 @@ try:
                 try:
                     scores = classify_keywords(llm_response, keywords_list)
                 except:
+                    traceback.print_exc()
                     print("An error occured, continuing...")
                     scores = {}
                 if scores:
