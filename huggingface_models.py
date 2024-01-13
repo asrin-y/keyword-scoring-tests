@@ -6,7 +6,7 @@ import os
 # from transformers import AutoTokenizer
 
 
-HF_KEY = os.environ.get("HUGGINGFACE_API_KEY")
+HF_KEY = "HF_API_KEY"
 
 headers = {"Authorization": f"Bearer {HF_KEY}"}
 
@@ -157,7 +157,7 @@ def map_language_code(two_char_code):
 
 def prompt_llm(llm_system_prompt, webpage_text):
 
-    API_URL = "https://api-inference.huggingface.co/models/openchat/openchat-3.5-1210"
+    API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
 
     # prompt = f'''
     #     <|system|>
@@ -224,6 +224,8 @@ def get_page_text(url):
 
     try:
         page = requests.get(url, headers=headers)
+    except KeyboardInterrupt:
+        raise  # Re-raise the KeyboardInterrupt exception
     except:
         return ""
 
@@ -234,6 +236,9 @@ def get_page_text(url):
 
     # get all text in the body
     body = soup.find('body')
+
+    if not body:
+        return ""
 
     text = body.text
 
